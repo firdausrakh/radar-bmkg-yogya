@@ -76,11 +76,19 @@
     <button class="btn tiny" id="diagnose" style="width:100%;margin:8px 0">🔍 Diagnosa gambar pada browser</button>
     <div class="url-box" id="frame-url">Memuat...</div>
     <div style="margin-top:8px"><a id="open-url" href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Buka gambar asli di tab baru ↗</a></div>
-    <p class="note">Mode <b>raster tiles</b> memakai layer native MapLibre (EPSG:3857), cache tile dan resampling linear agar pan/zoom lebih halus. Mode export lama tetap tersedia. Penghalusan visual tidak menambah resolusi pengamatan radar.</p>
+    <p class="note">Mode <b>raster tiles</b> memakai tile native MapLibre 512 px dengan cache, interpolasi bilinear, dan transisi zoom. Opsi 1024 px menghasilkan sampel gambar lebih rapat untuk tile yang sama, tetapi tidak menambah resolusi pengamatan radar.</p>
    </div>
    <div class="section">
     <h2>03 / Tampilan & diagnostik</h2>
     <div id="status" role="status" aria-live="polite" class="status wait">Menyiapkan peta dan frame radar...</div>
+    <label class="field" id="quality-wrap" style="margin-top:12px">
+      <span>Kualitas radar — mode raster tiles</span>
+      <select id="radar-quality">
+        <option value="512" selected>Seimbang — 512 px / tile</option>
+        <option value="1024">Detail tinggi — 1024 px / tile</option>
+      </select>
+    </label>
+    <p class="note" id="quality-hint">512 px untuk pan/zoom lebih ringan; 1024 px untuk detail visual lebih halus, tetapi unduhan lebih besar. Ini tidak menambah resolusi pengukuran radar.</p>
     <div class="control-row"><label for="opacity">Opasitas radar</label><strong id="opacity-value">78%</strong></div><input id="opacity" type="range" min="0" max="100" value="78">
     <label class="checkline"><input id="visible" type="checkbox" checked> Tampilkan radar</label>
     <label class="checkline"><input id="footprint" type="checkbox"> Tampilkan garis batas citra</label>
@@ -131,8 +139,10 @@
    // Each MapLibre raster tile supplies its own Mercator bbox. No "time" parameter:
    // this is a live map service, not a verified historical archive.
    function arcgisTileURL(){
-     const refresh=Math.floor(Date.now()/300000); // cache refresh key every 5 min
-     return ARCGIS_EXPORT+'?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256%2C256&format=png32&transparent=true&f=image&_refresh='+refresh;
+     // One native 512px map tile; optionally export double-density image.
+     const pixels=Number(els('radar-quality')?.value||512);
+     const refresh=Math.floor(Date.now()/300000); // new version only when explicitly refreshed
+     return ARCGIS_EXPORT+'?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size='+pixels+'%2C'+pixels+'&format=png32&transparent=true&f=image&_refresh='+refresh;
    }
    const isLiveTiles=()=>sourceEl.value==='arcgis-tiles';
    function liveVisibility(){
@@ -170,7 +180,7 @@
  const wib=els('wib-input'), stepEl=els('step'), countEl=els('count'), sourceEl=els('source');
  const img=els('radar-image'), statusEl=els('status'), logEl=els('log');
  let running=false, playbackSerial=0, requestSerial=0, map=null, lastObjectUrl=null, mapMoving=false, viewReloadTimer=null;
- let lastLoadedUrl=null, lastSuccessfulFrame=null, loadTimer=null;
+ let lastLoadedUrl=null, lastSuccessfulFrame=null, loadTimer=null, liveTemplateLoaded=null;
  const p=n=>String(n).padStart(2,'0');
  const utcDateFromWIB=v=>{
    const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(v);
@@ -260,9 +270,14 @@
         return true;
       }
       const src=map.getSource('arcgis-live-source');
-      src.setTiles([arcgisTileURL()]);
+      const template=arcgisTileURL();
+      if(template!==liveTemplateLoaded){
+        src.setTiles([template]);liveTemplateLoaded=template;
+        showStatus('wait','Mengambil tile radar '+els('radar-quality').value+' px; tile yang masih ada tidak dibuang saat pan/zoom.');
+      }else{
+        showStatus('good','Layer raster radar aktif. Sumber tidak dimuat ulang karena URL masih sama — menghindari kedipan.');
+      }
       updateLiveControls();
-      showStatus('wait','Layer radar terkini aktif. Tile dimuat langsung oleh MapLibre. Waktu yang dipilih bukan frame historis. Jika layer kosong, periksa F12 → Network (CORS/HTTP).');
       return true;
    }
    const serial=++requestSerial;
@@ -314,6 +329,7 @@
    map=new maplibregl.Map({
      container:'map',center:[110.35354557679102,-7.732219740791177],zoom:7.2,
      pitch:0,bearing:0,renderWorldCopies:false,dragRotate:false,pitchWithRotate:false,
+      maxTileCacheZoomLevels:6,
      attributionControl:true,
      style:{version:8,name:'Esri Dark Gray',sources:{
        'dark-base':{type:'raster',tiles:['https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'],tileSize:256,attribution:'© Esri, HERE, Garmin, OpenStreetMap contributors'},
@@ -324,8 +340,9 @@
    map.addControl(new maplibregl.ScaleControl({maxWidth:110,unit:'metric'}),'bottom-left');
    map.touchZoomRotate.disableRotation();
    map.on('load',()=>{
-     map.addSource('arcgis-live-source',{type:'raster',tiles:[arcgisTileURL()],tileSize:256,minzoom:1,maxzoom:13,attribution:'Radar CMAX © BMKG (gis.bmkg.go.id)'});
-     map.addLayer({id:'arcgis-live-layer',type:'raster',source:'arcgis-live-source',layout:{visibility:isLiveTiles()?'visible':'none'},paint:{'raster-opacity':Number(els('opacity').value)/100,'raster-resampling':'linear','raster-fade-duration':250}},'dark-labels');
+     map.addSource('arcgis-live-source',{type:'raster',tiles:[arcgisTileURL()],tileSize:512,minzoom:1,maxzoom:13,attribution:'Radar CMAX © BMKG (gis.bmkg.go.id)'});
+     liveTemplateLoaded=arcgisTileURL();
+     map.addLayer({id:'arcgis-live-layer',type:'raster',source:'arcgis-live-source',layout:{visibility:isLiveTiles()?'visible':'none'},paint:{'raster-opacity':Number(els('opacity').value)/100,'raster-resampling':'linear','raster-fade-duration':350,'raster-opacity-transition':{duration:180,delay:0}}},'dark-labels');
      map.addSource('footprint',{type:'geojson',data:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Polygon',coordinates:[[CORNERS[0],CORNERS[1],CORNERS[2],CORNERS[3],CORNERS[0]]]}}]}});
      map.addLayer({id:'footprint-line',type:'line',source:'footprint',layout:{visibility:'none'},paint:{'line-color':'#63dce7','line-width':1.6,'line-dasharray':[3,2]}});
      map.addSource('radar-site',{type:'geojson',data:{type:'Feature',geometry:{type:'Point',coordinates:[110.354311,-7.731645]},properties:{name:'Radar Sleman'}}});
@@ -353,12 +370,13 @@
  els('previous').addEventListener('click',()=>{stop();setDateAndLoad(new Date(currentUTC().getTime()-Number(stepEl.value)*60000));});
  els('next').addEventListener('click',()=>{stop();setDateAndLoad(new Date(currentUTC().getTime()+Number(stepEl.value)*60000));});
  wib.addEventListener('change',()=>{stop();loadFrame();});
- sourceEl.addEventListener('change',()=>{stop();updateLiveControls();mapMoving=false;clearTimeout(viewReloadTimer);els('proxy-wrap').style.display=sourceEl.value==='proxy'?'block':'none';if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');loadFrame();});
+ sourceEl.addEventListener('change',()=>{stop();els('quality-wrap').style.display=isLiveTiles()?'block':'none';els('quality-hint').style.display=isLiveTiles()?'block':'none';updateLiveControls();mapMoving=false;clearTimeout(viewReloadTimer);els('proxy-wrap').style.display=sourceEl.value==='proxy'?'block':'none';if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');loadFrame();});
  els('proxy-input').addEventListener('change',()=>{if(sourceEl.value==='proxy'){stop();loadFrame();}});
  els('play').addEventListener('click',()=>{if(running)stop();else runSeries(false);});
  els('stop').addEventListener('click',stop);
  els('test').addEventListener('click',()=>runSeries(true));
  els('now').addEventListener('click',()=>{stop();let n=new Date();n=new Date(Math.floor(n.getTime()/(Number(stepEl.value)*60000))*(Number(stepEl.value)*60000));setDateAndLoad(n);});
+ els('radar-quality').addEventListener('change',()=>{if(isLiveTiles())loadFrame();});
  els('opacity').addEventListener('input',()=>{els('opacity-value').textContent=els('opacity').value+'%';applyOverlay();liveVisibility();});
  els('visible').addEventListener('change',()=>{applyOverlay();liveVisibility();});
  els('footprint').addEventListener('change',()=>{if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');});
@@ -456,6 +474,7 @@
    }
  });
  // Jika file terpilih lokal dan pengguna mengubah frame, aplikasi kembali memakai metode dropdown.
+ els('quality-wrap').style.display=isLiveTiles()?'block':'none';els('quality-hint').style.display=isLiveTiles()?'block':'none';
  setupMap();updateLabels();updateLiveControls();loadFrame();
 })();
 </script>
