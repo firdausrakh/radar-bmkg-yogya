@@ -89,7 +89,7 @@
    </div>
    <div class="section">
      <h2>04 / Bandingkan dua frame</h2>
-     <p class="note">Periksa apakah layer CMAX benar-benar memiliki data historis. Bbox dan ukuran sama; hanya parameter waktu yang diubah.</p>
+     <p class="note">Uji apakah layanan menyediakan frame historis. Bandingkan secara visual atau periksa checksum piksel (jika CORS mengizinkan).</p>
      <div class="two" style="margin-top:9px">
        <label class="field"><span>Selisih waktu</span><select id="compare-offset"><option value="10">10 menit</option><option value="30" selected>30 menit</option><option value="60">60 menit</option><option value="120">120 menit</option></select></label>
        <button class="btn" id="compare" style="align-self:center">Bandingkan</button>
@@ -101,7 +101,9 @@
        </div>
        <p class="note" id="compare-msg">Buka masing-masing gambar untuk melihat perbedaan.</p>
      </div>
-     <p class="note"><a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer?f=pjson" target="_blank" rel="noopener noreferrer">Periksa timeInfo pada metadata ArcGIS</a></p>
+     <button class="btn tiny" id="pixel-test" style="width:100%;margin:8px 0">🔬 Uji piksel: waktu berbeda atau terbaru saja?</button>
+     <div id="pixel-result" class="status wait" style="display:none;white-space:pre-line" role="status"></div>
+     <p class="note"><a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer?f=pjson" target="_blank" rel="noopener noreferrer">Periksa timeInfo pada metadata ArcGIS (jika diizinkan)</a></p>
    </div>
    <p class="foot">Data radar: <a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer" target="_blank" rel="noopener noreferrer">BMKG ArcGIS Radar CMAX</a>. Mode PNG YOG memakai georeferensi tampilan situs BMKG. Basemap © Esri dan kontributor.</p>
   </div>
@@ -357,6 +359,58 @@
    const complete=(ok)=>{completed++;if(!ok)failed++;if(completed===2)els('compare-msg').textContent=failed?'Setidaknya satu gambar gagal dimuat. Periksa F12 → Network.':'Kedua gambar termuat. Jika terlihat sama, server mungkin tidak menyediakan riwayat; periksa timeInfo MapServer.';};
    for(const [id,u] of [['compare-a',u1],['compare-b',u2]]){
       const e=els(id);e.onload=()=>complete(true);e.onerror=()=>complete(false);e.src=u;
+   }
+ });
+ els('pixel-test').addEventListener('click',async()=>{
+   const out=els('pixel-result');out.style.display='block';out.className='status wait';
+   if(sourceEl.value!=='arcgis'){out.textContent='Pilih sumber ArcGIS BMKG terlebih dahulu.';return;}
+   let d;try{d=currentUTC();}catch(e){out.textContent=e.message;return;}
+   out.textContent='Mengambil tiga gambar dengan bbox dan ukuran identik...';
+   const requestURL=(date,withoutTime=false)=>{
+     const u=new URL(arcgisURL(date));
+     u.searchParams.set('size','384,384');
+     if(withoutTime)u.searchParams.delete('time');
+     return u.toString();
+   };
+   const points=[
+     {label:'Dua jam sebelumnya',url:requestURL(new Date(d.getTime()-7200000))},
+     {label:'Waktu dipilih',url:requestURL(d)},
+     {label:'Tanpa parameter time',url:requestURL(d,true)}
+   ];
+   async function fingerprint(u){
+     const response=await fetch(u,{mode:'cors',cache:'no-store'});
+     if(!response.ok)throw Error('HTTP '+response.status);
+     const blob=await response.blob();
+     if(!blob.type.startsWith('image/'))throw Error('Respons bukan image: '+blob.type);
+     const bitmap=await createImageBitmap(blob);
+     const canvas=document.createElement('canvas');
+     canvas.width=bitmap.width;canvas.height=bitmap.height;
+     const ctx=canvas.getContext('2d',{willReadFrequently:true});
+     if(!ctx)throw Error('Canvas 2D tidak tersedia');
+     ctx.drawImage(bitmap,0,0);bitmap.close?.();
+     const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+     let nonTransparent=0;
+     for(let i=3;i<pixels.length;i+=4)if(pixels[i]>0)nonTransparent++;
+     const buffer=await crypto.subtle.digest('SHA-256',pixels);
+     const sha=[...new Uint8Array(buffer)].map(b=>b.toString(16).padStart(2,'0')).join('');
+     return {sha,nonTransparent,width:canvas.width,height:canvas.height};
+   }
+   try{
+     const results=await Promise.all(points.map(async p=>({label:p.label,...await fingerprint(p.url)})));
+     const hashes=results.map(x=>x.sha);
+     const identical=hashes.every(h=>h===hashes[0]);
+     const empty=results.every(x=>x.nonTransparent===0);
+     const detail=results.map(x=>x.label+': '+x.sha.slice(0,16)+' | piksel berisi: '+x.nonTransparent.toLocaleString('id-ID')).join('\n');
+     let finding;
+     if(empty)finding='Semua citra transparan: area/waktu yang diuji mungkin tidak memiliki data. Ulangi pada area dengan pantulan radar.';
+     else if(identical)finding='KETIGA CITRA IDENTIK sampai isi piksel. Ini bukti kuat bahwa parameter time tidak mengubah hasil untuk permintaan yang diuji; tidak membuktikan seluruh layanan tidak memiliki riwayat.';
+     else if(hashes[0]===hashes[1])finding='Kedua waktu menghasilkan piksel IDENTIK; respons tanpa time berbeda. Perlu cek metadata timeInfo.';
+     else finding='Isi piksel berubah. Parameter waktu atau pembaruan data mungkin berpengaruh; ulangi uji untuk memastikan perubahan bukan karena pembaruan live saat pengujian.';
+     out.className='status '+(identical?'bad':'good');
+     out.textContent=detail+'\n'+finding;
+   }catch(e){
+     out.className='status bad';
+     out.textContent='Pemeriksaan piksel tidak bisa dijalankan: '+e.message+'. Ini bisa karena CORS/403. Perbandingan visual tetap tersedia, atau uji checksum lewat PowerShell.';
    }
  });
  // Jika file terpilih lokal dan pengguna mengubah frame, aplikasi kembali memakai metode dropdown.
