@@ -58,25 +58,25 @@
   <div class="side-scroll">
    <div class="eyebrow"><span class="orb"></span> BBWS SO / Prototipe WebGIS <span class="tag">STATIC</span></div>
    <h1>RADAR <em>CMAX</em><br>YOGYAKARTA</h1>
-   <p class="sub">MapLibre GL JS · Esri Dark Gray · frame BMKG YOG dalam UTC, kontrol dalam WIB</p>
+   <p class="sub">MapLibre GL JS · Esri Dark Gray · ArcGIS REST CMAX BMKG · waktu WIB</p>
    <div class="section">
     <h2>01 / Pilih frame radar</h2>
-    <label class="field"><span>Tanggal & waktu lokal (WIB, UTC+7)</span><input id="wib-input" type="datetime-local" step="600" value="2026-11-21T08:20"></label>
+    <label class="field"><span>Tanggal & waktu lokal (WIB, UTC+7)</span><input id="wib-input" type="datetime-local" step="600" value="2026-11-21T10:20"></label>
     <div class="timepair"><div><small>WIB (ditampilkan)</small><strong id="display-wib">21 Nov 08:20</strong></div><div><small>UTC (nama file)</small><strong id="display-utc">21 Nov 01:20</strong></div></div>
-    <div class="line" style="margin-bottom:10px"><label class="field" style="margin:0;flex:1"><span>Interval frame</span><select id="step"><option value="5">5 menit</option><option value="10" selected>10 menit</option><option value="15">15 menit</option><option value="20">20 menit</option></select></label><label class="field" style="margin:0;flex:1"><span>Jumlah frame uji/animasi</span><select id="count"><option value="4">4 frame</option><option value="6" selected>6 frame</option><option value="12">12 frame</option></select></label></div>
+    <div class="line" style="margin-bottom:10px"><label class="field" style="margin:0;flex:1"><span>Interval frame</span><select id="step"><option value="5" selected>5 menit</option><option value="10">10 menit</option><option value="15">15 menit</option><option value="20">20 menit</option></select></label><label class="field" style="margin:0;flex:1"><span>Jumlah frame uji/animasi</span><select id="count"><option value="4">4 frame</option><option value="6" selected>6 frame</option><option value="12">12 frame</option></select></label></div>
     <div class="three"><button class="btn" id="previous">← Sebelum</button><button class="btn primary" id="load">Muat frame</button><button class="btn" id="next">Sesudah →</button></div>
     <div class="two" style="margin-top:8px"><button class="btn secondary" id="play">▶ Animasi</button><button class="btn secondary" id="test">✓ Uji URL frame</button></div>
     <div class="two" style="margin-top:8px"><button class="btn tiny" id="now">Waktu WIB sekarang</button><button class="btn tiny" id="stop">■ Berhenti</button></div>
    </div>
    <div class="section">
-    <h2>02 / Sumber PNG</h2>
-    <label class="field"><span>Metode memuat gambar</span><select id="source"><option value="remote" selected>BMKG langsung (HTML overlay)</option><option value="local">Repo GitHub (frames/*.png)</option><option value="proxy">Proxy eksternal (opsional)</option></select></label>
+    <h2>02 / Sumber Radar</h2>
+    <label class="field"><span>Metode memuat gambar</span><select id="source"><option value="arcgis" selected>ArcGIS BMKG / GeoNusa (utama)</option><option value="remote">PNG YOG lama (terblokir)</option><option value="local">Repo GitHub (frames/*.png)</option><option value="proxy">Proxy eksternal (opsional)</option></select></label>
     <label class="field" id="proxy-wrap" style="display:none"><span>URL dasar proxy, mis. https://nama.workers.dev/api/radar?frame=</span><input id="proxy-input" type="url" placeholder="https://nama.workers.dev/api/radar?frame="></label>
     <div class="two"><div class="file-wrap btn">⬆ Unggah PNG lokal<input id="file" type="file" accept="image/png" aria-label="Unggah file PNG radar"></div><button class="btn" id="copy">Salin URL frame</button></div>
     <button class="btn tiny" id="diagnose" style="width:100%;margin:8px 0">🔍 Diagnosa gambar pada browser</button>
     <div class="url-box" id="frame-url">Memuat...</div>
     <div style="margin-top:8px"><a id="open-url" href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Buka gambar asli di tab baru ↗</a></div>
-    <p class="note">Mode HTML tidak memerlukan CORS <code>fetch()</code>, tetapi masih dapat ditolak oleh hotlink atau pemblokir browser. Pengujian mencoba dua kebijakan Referer. GitHub Pages tidak mempunyai proxy server-side.</p>
+    <p class="note">ArcGIS BMKG mengekspor PNG berdasarkan viewport MapLibre dalam EPSG:3857; parameter waktu diuji sebagai menit Unix UTC. Peta digeser atau diperbesar akan memuat gambar baru. Jika sumber menolak akses, periksa F12 → Network.</p>
    </div>
    <div class="section">
     <h2>03 / Tampilan & diagnostik</h2>
@@ -87,14 +87,14 @@
     <div class="log" id="log" aria-label="Hasil pengujian per frame"></div>
     <p class="note"><b>CMAX adalah reflektivitas radar</b> (dBZ), bukan besaran hujan mm/jam secara langsung. Warna dan artefak nonhujan harus ditafsirkan sesuai keterangan BMKG.</p>
    </div>
-   <p class="foot">Data radar: <a href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">BMKG Stasiun Meteorologi Yogyakarta</a>. Georeferensi disalin dari pengukuran tampilan peta BMKG, bukan metadata raster asli. Basemap © Esri dan kontributor.</p>
+   <p class="foot">Data radar: <a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer" target="_blank" rel="noopener noreferrer">BMKG ArcGIS Radar CMAX</a>. Mode PNG YOG memakai georeferensi tampilan situs BMKG. Basemap © Esri dan kontributor.</p>
   </div>
  </aside>
  <section class="map-wrap" aria-label="Peta Radar CMAX Yogyakarta">
   <div id="map"></div>
   <div id="radar-stage"><img id="radar-image" alt="Overlay radar CMAX BMKG Yogyakarta"></div>
-  <div class="map-banner"><div class="map-pill"><strong>Radar Site: Sleman</strong><span id="map-time">21 Nov 2026 · 08:20 WIB</span></div><div class="map-actions"><button id="fit" title="Tampilkan seluruh cakupan citra">⤢ Cakupan</button><button id="reset" title="Fokus ke Yogyakarta">◎ Yogya</button></div></div>
-  <div class="map-footer">Radar CMAX © BMKG · Basemap Esri Dark Gray Canvas · <a href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Sumber resmi</a></div>
+  <div class="map-banner"><div class="map-pill"><strong>Radar CMAX BMKG</strong><span id="map-time">21 Nov 2026 · 10:20 WIB</span></div><div class="map-actions"><button id="fit" title="Tampilkan seluruh cakupan citra">⤢ Cakupan</button><button id="reset" title="Fokus ke Yogyakarta">◎ Yogya</button></div></div>
+  <div class="map-footer">Radar CMAX © BMKG · Basemap Esri Dark Gray Canvas · <a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer" target="_blank" rel="noopener noreferrer">ArcGIS BMKG</a></div>
  </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
@@ -109,10 +109,26 @@
  ];
  const WEST=CORNERS[0][0], NORTH=CORNERS[0][1], EAST=CORNERS[2][0], SOUTH=CORNERS[2][1];
  const RADAR_BASE='https://stamet-yogya.bmkg.go.id/cache/radar/YOG/CMAX/';
+  const ARCGIS_EXPORT='https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer/export';
+  const mercatorPoint=(lng,lat)=>{
+    const clamped=Math.max(-85.05112878,Math.min(85.05112878,lat));
+    return [6378137*lng*Math.PI/180,6378137*Math.log(Math.tan(Math.PI/4+clamped*Math.PI/360))];
+  };
+  function arcgisURL(d){
+    const stage=els('radar-stage'),width=Math.max(1,Math.round(stage.clientWidth)),height=Math.max(1,Math.round(stage.clientHeight));
+    const ratio=Math.min(1,2048/Math.max(width,height));
+    const iw=Math.max(1,Math.round(width*ratio)),ih=Math.max(1,Math.round(height*ratio));
+    const nw=map?map.unproject([0,0]):{lng:109.25,lat:-6.1};
+    const se=map?map.unproject([width,height]):{lng:111.45,lat:-9.2};
+    const a=mercatorPoint(nw.lng,nw.lat),b=mercatorPoint(se.lng,se.lat);
+    const bbox=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])].join(',');
+    const params=new URLSearchParams({bbox,bboxSR:'3857',imageSR:'3857',size:iw+','+ih,format:'png32',transparent:'true',f:'image',time:String(Math.floor(d.getTime()/60000))});
+    return ARCGIS_EXPORT+'?'+params.toString();
+  }
  const els=id=>document.getElementById(id);
  const wib=els('wib-input'), stepEl=els('step'), countEl=els('count'), sourceEl=els('source');
  const img=els('radar-image'), statusEl=els('status'), logEl=els('log');
- let running=false, playbackSerial=0, requestSerial=0, map=null, lastObjectUrl=null;
+ let running=false, playbackSerial=0, requestSerial=0, map=null, lastObjectUrl=null, mapMoving=false, viewReloadTimer=null;
  let lastLoadedUrl=null, lastSuccessfulFrame=null, loadTimer=null;
  const p=n=>String(n).padStart(2,'0');
  const utcDateFromWIB=v=>{
@@ -133,7 +149,8 @@
  const timeFmt=(d,tz)=>new Intl.DateTimeFormat('id-ID',{timeZone:tz,day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d);
  const shortFmt=(d,tz)=>new Intl.DateTimeFormat('id-ID',{timeZone:tz,day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d);
  function urlFor(d){
-   if(sourceEl.value==='remote')return remoteURL(d);
+   if(sourceEl.value==='arcgis')return arcgisURL(d);
+    if(sourceEl.value==='remote')return remoteURL(d);
    if(sourceEl.value==='local')return './frames/YOG-'+frameCode(d)+'.png';
    const base=els('proxy-input').value.trim();
    if(!base || !/^https:\/\//i.test(base))throw Error('Isi URL proxy https:// yang valid terlebih dahulu.');
@@ -153,19 +170,24 @@
      els('display-utc').textContent=shortFmt(d,'UTC');
      els('map-time').textContent=timeFmt(d,'Asia/Jakarta')+' WIB';
      els('frame-url').textContent=url;
-     els('open-url').href=remoteURL(d);
-     els('open-url').textContent='Buka PNG asli BMKG ↗';
+     els('open-url').href=sourceEl.value==='arcgis'?url:remoteURL(d);
+     els('open-url').textContent=sourceEl.value==='arcgis'?'Buka ArcGIS Export ↗':'Buka PNG asli BMKG ↗';
      try{history.replaceState(null,'','?utc='+frameCode(d));}catch(_){/* file:// preview may disallow history updates */}
      return {d,url};
    }catch(e){showStatus('bad',e.message);return null;}
  }
  function applyOverlay(){
    if(!map)return;
-   const nw=map.project(CORNERS[0]),se=map.project(CORNERS[2]);
-   const width=se.x-nw.x,height=se.y-nw.y;
-   img.style.left=nw.x+'px';img.style.top=nw.y+'px';img.style.width=Math.max(0,width)+'px';img.style.height=Math.max(0,height)+'px';
+   if(sourceEl.value==='arcgis'){
+     const stage=els('radar-stage');
+     img.style.left='0px';img.style.top='0px';img.style.width=stage.clientWidth+'px';img.style.height=stage.clientHeight+'px';
+   }else{
+     const nw=map.project(CORNERS[0]),se=map.project(CORNERS[2]);
+     const width=se.x-nw.x,height=se.y-nw.y;
+     img.style.left=nw.x+'px';img.style.top=nw.y+'px';img.style.width=Math.max(0,width)+'px';img.style.height=Math.max(0,height)+'px';
+   }
    img.style.opacity=String(Number(els('opacity').value)/100);
-   img.style.display=els('visible').checked&&Boolean(lastLoadedUrl)?'block':'none';
+   img.style.display=els('visible').checked&&Boolean(lastLoadedUrl)&&!(sourceEl.value==='arcgis'&&mapMoving)?'block':'none';
  }
  function probe(url,timeoutMs=12000,policy=""){
    return new Promise(resolve=>{
@@ -189,7 +211,7 @@
  async function loadFrame(){
    const state=updateLabels();if(!state)return false;
    const serial=++requestSerial;
-   lastLoadedUrl=null;applyOverlay();showStatus('wait','Mengambil frame '+frameCode(state.d)+' dari '+(sourceEl.value==='remote'?'BMKG':sourceEl.value==='local'?'repository':'proxy')+'…');
+   lastLoadedUrl=null;applyOverlay();showStatus('wait','Mengambil frame '+frameCode(state.d)+' dari '+(sourceEl.value==='arcgis'?'ArcGIS BMKG':sourceEl.value==='remote'?'BMKG YOG':sourceEl.value==='local'?'repository':'proxy')+'…');
    const result=await probeFrame(state.url);
    if(serial!==requestSerial)return false;
    if(result.ok){
@@ -197,7 +219,7 @@
      img.src=state.url;lastLoadedUrl=state.url;lastSuccessfulFrame=state.d;
      showStatus('good','BERHASIL: frame '+frameCode(state.d)+' termuat ('+result.width+' × '+result.height+' piksel; mode '+result.method+'). '+timeFmt(state.d,'Asia/Jakarta')+' WIB.');
    }else{
-     showStatus('bad','GAGAL menampilkan frame '+frameCode(state.d)+' melalui '+result.method+'. IMG tidak membedakan 403/hotlink, 404, pemblokir browser, atau jaringan. Klik Diagnosa atau gunakan Proxy Cloudflare Workers.');
+     showStatus('bad','GAGAL memuat frame '+frameCode(state.d)+' melalui '+result.method+'. Periksa status HTTP pada F12 → Network dan coba tautan ArcGIS Export. PNG cache YOG lama telah terkonfirmasi terkena Cloudflare Challenge.');
    }
    pushLog(state.d,result.ok,result.ok?result.width+'px · '+result.method:'gambar · '+result.method);applyOverlay();
    return result.ok;
@@ -253,7 +275,11 @@
      map.addLayer({id:'radar-site-circle',type:'circle',source:'radar-site',paint:{'circle-radius':5,'circle-color':'#7de3eb','circle-stroke-color':'#081928','circle-stroke-width':2}});
      applyOverlay();
    });
-   map.on('move',applyOverlay);map.on('resize',applyOverlay);
+   map.on('movestart',()=>{if(sourceEl.value==='arcgis'){mapMoving=true;applyOverlay();}});
+    map.on('move',()=>{if(sourceEl.value!=='arcgis')applyOverlay();});
+    const reloadView=()=>{if(sourceEl.value!=='arcgis')return;mapMoving=false;clearTimeout(viewReloadTimer);viewReloadTimer=setTimeout(()=>{if(!running)loadFrame();},260);};
+    map.on('moveend',reloadView);
+    map.on('resize',()=>{applyOverlay();reloadView();});
    map.on('error',e=>{if(!lastLoadedUrl&&e.error)console.warn('MapLibre:',e.error.message);});
  }
  // Awal aplikasi: ?utc=YYYYMMDD-HHMM (opsional, dapat dibagikan).
@@ -267,7 +293,7 @@
  els('previous').addEventListener('click',()=>{stop();setDateAndLoad(new Date(currentUTC().getTime()-Number(stepEl.value)*60000));});
  els('next').addEventListener('click',()=>{stop();setDateAndLoad(new Date(currentUTC().getTime()+Number(stepEl.value)*60000));});
  wib.addEventListener('change',()=>{stop();loadFrame();});
- sourceEl.addEventListener('change',()=>{stop();els('proxy-wrap').style.display=sourceEl.value==='proxy'?'block':'none';loadFrame();});
+ sourceEl.addEventListener('change',()=>{stop();mapMoving=false;clearTimeout(viewReloadTimer);els('proxy-wrap').style.display=sourceEl.value==='proxy'?'block':'none';if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');loadFrame();});
  els('proxy-input').addEventListener('change',()=>{if(sourceEl.value==='proxy'){stop();loadFrame();}});
  els('play').addEventListener('click',()=>{if(running)stop();else runSeries(false);});
  els('stop').addEventListener('click',stop);
@@ -275,7 +301,7 @@
  els('now').addEventListener('click',()=>{stop();let n=new Date();n=new Date(Math.floor(n.getTime()/(Number(stepEl.value)*60000))*(Number(stepEl.value)*60000));setDateAndLoad(n);});
  els('opacity').addEventListener('input',()=>{els('opacity-value').textContent=els('opacity').value+'%';applyOverlay();});
  els('visible').addEventListener('change',applyOverlay);
- els('footprint').addEventListener('change',()=>{if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked?'visible':'none');});
+ els('footprint').addEventListener('change',()=>{if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');});
  els('fit').addEventListener('click',()=>map?.fitBounds([[WEST,SOUTH],[EAST,NORTH]],{padding:40,duration:600}));
  els('reset').addEventListener('click',()=>map?.easeTo({center:[110.35354557679102,-7.732219740791177],zoom:7.6,pitch:0,bearing:0,duration:600}));
  els('diagnose').addEventListener('click',async()=>{
