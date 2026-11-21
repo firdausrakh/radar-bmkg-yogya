@@ -73,9 +73,10 @@
     <label class="field"><span>Metode memuat gambar</span><select id="source"><option value="remote" selected>BMKG langsung (HTML overlay)</option><option value="local">Repo GitHub (frames/*.png)</option><option value="proxy">Proxy eksternal (opsional)</option></select></label>
     <label class="field" id="proxy-wrap" style="display:none"><span>URL dasar proxy, mis. https://nama.workers.dev/api/radar?frame=</span><input id="proxy-input" type="url" placeholder="https://nama.workers.dev/api/radar?frame="></label>
     <div class="two"><div class="file-wrap btn">⬆ Unggah PNG lokal<input id="file" type="file" accept="image/png" aria-label="Unggah file PNG radar"></div><button class="btn" id="copy">Salin URL frame</button></div>
+    <button class="btn tiny" id="diagnose" style="width:100%;margin:8px 0">🔍 Diagnosa gambar pada browser</button>
     <div class="url-box" id="frame-url">Memuat...</div>
     <div style="margin-top:8px"><a id="open-url" href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Buka gambar asli di tab baru ↗</a></div>
-    <p class="note">Mode HTML tidak memerlukan CORS <code>fetch()</code>, tetapi bisa tetap ditolak oleh hotlink/server BMKG. GitHub Pages tidak menyediakan proxy server-side.</p>
+    <p class="note">Mode HTML tidak memerlukan CORS <code>fetch()</code>, tetapi masih dapat ditolak oleh hotlink atau pemblokir browser. Pengujian mencoba dua kebijakan Referer. GitHub Pages tidak mempunyai proxy server-side.</p>
    </div>
    <div class="section">
     <h2>03 / Tampilan & diagnostik</h2>
@@ -91,7 +92,7 @@
  </aside>
  <section class="map-wrap" aria-label="Peta Radar CMAX Yogyakarta">
   <div id="map"></div>
-  <div id="radar-stage"><img id="radar-image" alt="Overlay radar CMAX BMKG Yogyakarta" referrerpolicy="no-referrer"></div>
+  <div id="radar-stage"><img id="radar-image" alt="Overlay radar CMAX BMKG Yogyakarta"></div>
   <div class="map-banner"><div class="map-pill"><strong>Radar Site: Sleman</strong><span id="map-time">21 Nov 2026 · 08:20 WIB</span></div><div class="map-actions"><button id="fit" title="Tampilkan seluruh cakupan citra">⤢ Cakupan</button><button id="reset" title="Fokus ke Yogyakarta">◎ Yogya</button></div></div>
   <div class="map-footer">Radar CMAX © BMKG · Basemap Esri Dark Gray Canvas · <a href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Sumber resmi</a></div>
  </section>
@@ -166,9 +167,9 @@
    img.style.opacity=String(Number(els('opacity').value)/100);
    img.style.display=els('visible').checked&&Boolean(lastLoadedUrl)?'block':'none';
  }
- function probe(url,timeoutMs=13000){
+ function probe(url,timeoutMs=12000,policy=""){
    return new Promise(resolve=>{
-     const pre=new Image();pre.referrerPolicy='no-referrer';
+     const pre=new Image();if(policy)pre.referrerPolicy=policy;
      let finished=false;
      const timer=setTimeout(()=>finish(false,'Timeout'),timeoutMs);
      function finish(ok,reason){if(finished)return;finished=true;clearTimeout(timer);pre.onload=null;pre.onerror=null;resolve({ok,reason,width:pre.naturalWidth,height:pre.naturalHeight});}
@@ -177,20 +178,28 @@
      pre.src=url;
    });
  }
+ async function probeFrame(url,timeoutMs=12000){
+  const first=await probe(url,timeoutMs);
+  if(first.ok)return {...first,policy:'',method:'default'};
+  if(sourceEl.value!=='remote')return {...first,policy:'',method:'default'};
+  const second=await probe(url,timeoutMs,'no-referrer');
+  return {...second,policy:second.ok?'no-referrer':'',method:second.ok?'tanpa-Referer':'default + tanpa-Referer'};
+ }
+ function setImgPolicy(policy){if(policy)img.referrerPolicy=policy;else img.removeAttribute('referrerpolicy');}
  async function loadFrame(){
    const state=updateLabels();if(!state)return false;
    const serial=++requestSerial;
    lastLoadedUrl=null;applyOverlay();showStatus('wait','Mengambil frame '+frameCode(state.d)+' dari '+(sourceEl.value==='remote'?'BMKG':sourceEl.value==='local'?'repository':'proxy')+'…');
-   const result=await probe(state.url);
+   const result=await probeFrame(state.url);
    if(serial!==requestSerial)return false;
    if(result.ok){
-     img.onload=()=>applyOverlay();img.onerror=()=>{lastLoadedUrl=null;applyOverlay();showStatus('bad','Gambar berhasil diperiksa tetapi gagal ditampilkan.');};
+     setImgPolicy(result.policy);img.onload=()=>applyOverlay();img.onerror=()=>{lastLoadedUrl=null;applyOverlay();showStatus('bad','PNG awal termuat, tetapi gagal ditampilkan. Periksa F12 Network.');};
      img.src=state.url;lastLoadedUrl=state.url;lastSuccessfulFrame=state.d;
-     showStatus('good','BERHASIL: frame '+frameCode(state.d)+' termuat ('+result.width+' × '+result.height+' piksel). '+timeFmt(state.d,'Asia/Jakarta')+' WIB.');
+     showStatus('good','BERHASIL: frame '+frameCode(state.d)+' termuat ('+result.width+' × '+result.height+' piksel; mode '+result.method+'). '+timeFmt(state.d,'Asia/Jakarta')+' WIB.');
    }else{
-     showStatus('bad','GAGAL: frame '+frameCode(state.d)+' tidak dapat dimuat ('+result.reason+'). Bisa karena PNG belum tersedia, 404, hotlink, DNS, atau jaringan; mode HTML tidak membuktikan kegagalan CORS. Buka URL asli atau unggah PNG lokal.');
+     showStatus('bad','GAGAL menampilkan frame '+frameCode(state.d)+' melalui '+result.method+'. IMG tidak membedakan 403/hotlink, 404, pemblokir browser, atau jaringan. Klik Diagnosa atau gunakan Proxy Cloudflare Workers.');
    }
-   pushLog(state.d,result.ok,result.ok?result.width+'px':'gambar');applyOverlay();
+   pushLog(state.d,result.ok,result.ok?result.width+'px · '+result.method:'gambar · '+result.method);applyOverlay();
    return result.ok;
  }
  function setDateAndLoad(d){wib.value=wibValueFromDate(d);return loadFrame();}
@@ -209,9 +218,9 @@
      if(testOnly){
        const state=updateLabels();if(!state)break;
        showStatus('wait','Memeriksa URL '+(i+1)+'/'+count+': '+frameCode(d));
-       const r=await probe(state.url,12000);
+       const r=await probeFrame(state.url,12000);
        if(serial!==playbackSerial)break;
-       ok=r.ok;pushLog(d,ok,ok?r.width+'px':'gambar');
+       ok=r.ok;pushLog(d,ok,ok?r.width+'px · '+r.method:'gambar · '+r.method);
      }else{ok=await loadFrame();}
      if(serial!==playbackSerial)break;
      if(ok)successes++;
@@ -269,7 +278,18 @@
  els('footprint').addEventListener('change',()=>{if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked?'visible':'none');});
  els('fit').addEventListener('click',()=>map?.fitBounds([[WEST,SOUTH],[EAST,NORTH]],{padding:40,duration:600}));
  els('reset').addEventListener('click',()=>map?.easeTo({center:[110.35354557679102,-7.732219740791177],zoom:7.6,pitch:0,bearing:0,duration:600}));
- els('copy').addEventListener('click',async()=>{try{const url=urlFor(currentUTC());await navigator.clipboard.writeText(url);showStatus('good','URL frame disalin: '+url);}catch{showStatus('bad','Tidak bisa menyalin otomatis. Salin URL dari kotak di atas.');}});
+ els('diagnose').addEventListener('click',async()=>{
+    stop();const state=updateLabels();if(!state)return;
+    showStatus('wait','Diagnosa 1 frame: IMG normal, IMG tanpa Referer, dan fetch CORS...');
+    const checks=await Promise.all([
+      probe(state.url,10000).then(r=>({name:'IMG normal',...r})),
+      probe(state.url,10000,'no-referrer').then(r=>({name:'IMG tanpa Referer',...r})),
+      fetch(state.url,{mode:'cors',cache:'no-store'}).then(r=>({name:'fetch CORS',ok:r.ok,reason:'HTTP '+r.status})).catch(e=>({name:'fetch CORS',ok:false,reason:e.message}))
+    ]);
+    for(const c of checks)pushLog(state.d,c.ok,c.name+' — '+(c.ok?'OK':c.reason));
+    showStatus(checks.some(x=>x.ok)?'good':'bad',checks.map(c=>c.name+': '+(c.ok?'BERHASIL':'GAGAL')+' ('+c.reason+')').join(' | ')+' | Untuk status HTTP asli, periksa F12 → Network.');
+  });
+  els('copy').addEventListener('click',async()=>{try{const url=urlFor(currentUTC());await navigator.clipboard.writeText(url);showStatus('good','URL frame disalin: '+url);}catch{showStatus('bad','Tidak bisa menyalin otomatis. Salin URL dari kotak di atas.');}});
  els('file').addEventListener('change',async ev=>{
    const file=ev.target.files?.[0];if(!file)return;
    if(file.type!=='image/png'&&!file.name.toLowerCase().endsWith('.png')){showStatus('bad','Pilih file PNG.');return;}
