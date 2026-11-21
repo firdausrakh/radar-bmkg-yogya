@@ -60,7 +60,7 @@
    <h1>RADAR <em>CMAX</em><br>YOGYAKARTA</h1>
    <p class="sub">MapLibre GL JS · Esri Dark Gray · ArcGIS REST CMAX BMKG · waktu WIB</p>
    <div class="section">
-    <h2>01 / Waktu & frame radar</h2><p class="note" style="margin-bottom:10px"><b>Mode raster tiles = terkini.</b> Tombol waktu/animasi hanya berlaku bagi sumber arsip yang menyimpan frame asli. ArcGIS BMKG belum terbukti mendukung frame historis.</p>
+    <h2>01 / Waktu & frame radar</h2><p class="note" style="margin-bottom:10px"><b>Mode raster tiles bukan jaminan real-time.</b> Waktu observasi dari ArcGIS belum tersedia. Tombol waktu/animasi hanya berlaku untuk sumber dengan arsip frame asli.</p>
     <label class="field"><span>Tanggal & waktu lokal (WIB, UTC+7)</span><input id="wib-input" type="datetime-local" step="600" value="2026-11-21T10:20"></label>
     <div class="timepair"><div><small>WIB (ditampilkan)</small><strong id="display-wib">21 Nov 08:20</strong></div><div><small>UTC (nama file)</small><strong id="display-utc">21 Nov 01:20</strong></div></div>
     <div class="line" style="margin-bottom:10px"><label class="field" style="margin:0;flex:1"><span>Interval frame</span><select id="step"><option value="5" selected>5 menit</option><option value="10">10 menit</option><option value="15">15 menit</option><option value="20">20 menit</option></select></label><label class="field" style="margin:0;flex:1"><span>Jumlah frame uji/animasi</span><select id="count"><option value="4">4 frame</option><option value="6" selected>6 frame</option><option value="12">12 frame</option></select></label></div>
@@ -70,13 +70,15 @@
    </div>
    <div class="section">
     <h2>02 / Sumber Radar</h2>
-    <label class="field"><span>Metode memuat gambar</span><select id="source"><option value="arcgis-tiles" selected>Radar terkini — raster tiles (smooth)</option><option value="arcgis">ArcGIS — export satu gambar (lama)</option><option value="remote">PNG YOG lama (terblokir)</option><option value="local">Repo GitHub (frames/*.png)</option><option value="proxy">Proxy eksternal (opsional)</option></select></label>
+    <label class="field"><span>Metode memuat gambar</span><select id="source"><option value="arcgis-tiles" selected>ArcGIS BMKG — waktu belum terverifikasi (smooth)</option><option value="arcgis">ArcGIS — export satu gambar (lama)</option><option value="remote">PNG YOG lama (terblokir)</option><option value="local">Repo GitHub (frames/*.png)</option><option value="proxy">Proxy eksternal (opsional)</option></select></label>
     <label class="field" id="proxy-wrap" style="display:none"><span>URL dasar proxy, mis. https://nama.workers.dev/api/radar?frame=</span><input id="proxy-input" type="url" placeholder="https://nama.workers.dev/api/radar?frame="></label>
     <div class="two"><div class="file-wrap btn">⬆ Unggah PNG lokal<input id="file" type="file" accept="image/png" aria-label="Unggah file PNG radar"></div><button class="btn" id="copy">Salin URL frame</button></div>
+    <button class="btn primary" id="refresh-arcgis" style="width:100%;margin:8px 0 2px">↻ Refresh paksa ArcGIS (lewati cache URL)</button>
+    <p class="note" id="last-refresh-arcgis">Belum ada refresh paksa. Waktu permintaan tidak sama dengan waktu observasi radar.</p>
     <button class="btn tiny" id="diagnose" style="width:100%;margin:8px 0">🔍 Diagnosa gambar pada browser</button>
     <div class="url-box" id="frame-url">Memuat...</div>
     <div style="margin-top:8px"><a id="open-url" href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Buka gambar asli di tab baru ↗</a></div>
-    <p class="note">Mode <b>raster tiles</b> memakai tile native MapLibre 512 px dengan cache, interpolasi bilinear, dan transisi zoom. Opsi 1024 px menghasilkan sampel gambar lebih rapat untuk tile yang sama, tetapi tidak menambah resolusi pengamatan radar.</p>
+    <p class="note">Layer <b>ArcGIS BMKG</b> memakai raster tiles native MapLibre dengan interpolasi bilinear dan transisi halus. Refresh paksa mengganti URL agar browser meminta ulang gambar, tetapi <b>tidak menjamin data di server BMKG sudah baru</b>. Bandingkan dengan <a href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">radar Sleman resmi</a>; produk mosaik dan single-site dapat berbeda.</p>
    </div>
    <div class="section">
     <h2>03 / Tampilan & diagnostik</h2>
@@ -141,7 +143,7 @@
    function arcgisTileURL(){
      // One native 512px map tile; optionally export double-density image.
      const pixels=Number(els('radar-quality')?.value||512);
-     const refresh=Math.floor(Date.now()/300000); // new version only when explicitly refreshed
+     const refresh=forcedTileRefreshKey??Math.floor(Date.now()/300000); // explicit refresh overrides cached URL version
      return ARCGIS_EXPORT+'?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size='+pixels+'%2C'+pixels+'&format=png32&transparent=true&f=image&_refresh='+refresh;
    }
    const isLiveTiles=()=>sourceEl.value==='arcgis-tiles';
@@ -155,9 +157,9 @@
      for(const id of ['previous','next','play','test'])els(id).disabled=live;
      wib.disabled=live;
      if(live){
-       els('display-wib').textContent='RADAR TERKINI';
-       els('display-utc').textContent='Tidak tersedia';
-       els('map-time').textContent='Live · waktu observasi belum diketahui';
+       els('display-wib').textContent='Tidak diketahui';
+       els('display-utc').textContent='Tidak diketahui';
+       els('map-time').textContent='ArcGIS BMKG · waktu observasi belum terverifikasi';
      }
      liveVisibility();
    }
@@ -180,7 +182,7 @@
  const wib=els('wib-input'), stepEl=els('step'), countEl=els('count'), sourceEl=els('source');
  const img=els('radar-image'), statusEl=els('status'), logEl=els('log');
  let running=false, playbackSerial=0, requestSerial=0, map=null, lastObjectUrl=null, mapMoving=false, viewReloadTimer=null;
- let lastLoadedUrl=null, lastSuccessfulFrame=null, loadTimer=null, liveTemplateLoaded=null;
+ let lastLoadedUrl=null, lastSuccessfulFrame=null, loadTimer=null, liveTemplateLoaded=null, forcedTileRefreshKey=null;
  const p=n=>String(n).padStart(2,'0');
  const utcDateFromWIB=v=>{
    const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(v);
@@ -218,9 +220,9 @@
  function updateLabels(){
    try{
      const d=currentUTC(),url=urlFor(d);
-     els('display-wib').textContent=isLiveTiles()?'LIVE':shortFmt(d,'Asia/Jakarta');
-     els('display-utc').textContent=isLiveTiles()?'N/A':shortFmt(d,'UTC');
-     els('map-time').textContent=isLiveTiles()?'Radar terkini · waktu akuisisi tidak tersedia':timeFmt(d,'Asia/Jakarta')+' WIB';
+     els('display-wib').textContent=isLiveTiles()?'Tidak diketahui':shortFmt(d,'Asia/Jakarta');
+     els('display-utc').textContent=isLiveTiles()?'Tidak diketahui':shortFmt(d,'UTC');
+     els('map-time').textContent=isLiveTiles()?'ArcGIS BMKG · waktu observasi belum terverifikasi':timeFmt(d,'Asia/Jakarta')+' WIB';
      els('frame-url').textContent=url;
      els('open-url').href=isLiveTiles()?arcgisURL(new Date()):sourceEl.value==='arcgis'?url:remoteURL(d);
      els('open-url').textContent=(isLiveTiles()||sourceEl.value==='arcgis')?'Buka ArcGIS Export ↗':'Buka PNG asli BMKG ↗';
@@ -273,9 +275,9 @@
       const template=arcgisTileURL();
       if(template!==liveTemplateLoaded){
         src.setTiles([template]);liveTemplateLoaded=template;
-        showStatus('wait','Mengambil tile radar '+els('radar-quality').value+' px; tile yang masih ada tidak dibuang saat pan/zoom.');
+        showStatus('wait','Meminta ulang tile ArcGIS '+els('radar-quality').value+' px. Waktu observasi belum diketahui; jangan dianggap real-time.');
       }else{
-        showStatus('good','Layer raster radar aktif. Sumber tidak dimuat ulang karena URL masih sama — menghindari kedipan.');
+        showStatus('wait','Layer ArcGIS ditampilkan dari tile yang sudah dimuat. Waktu observasi belum diketahui. Klik Refresh paksa untuk meminta ulang.');
       }
       updateLiveControls();
       return true;
@@ -357,7 +359,7 @@
     map.on('moveend',reloadView);
     map.on('resize',()=>{applyOverlay();reloadView();});
    map.on('error',e=>{if(e.error){console.warn('MapLibre:',e.error.message);if(isLiveTiles()&&/radarcmax|raster|tile|CORS|403/i.test(e.error.message||''))showStatus('bad','Gagal memuat tile radar BMKG: '+e.error.message+'. Jika ArcGIS Export satu gambar masih berhasil, pilih mode export lama.');}});
-   map.on('sourcedata',e=>{if(e.sourceId==='arcgis-live-source'&&e.isSourceLoaded&&isLiveTiles())showStatus('good','Layer radar terkini berhasil dimuat sebagai raster tiles native MapLibre. Geser/zoom untuk membandingkan kelancaran. Ini bukan arsip waktu.');});
+   map.on('sourcedata',e=>{if(e.sourceId==='arcgis-live-source'&&e.isSourceLoaded&&isLiveTiles())showStatus('wait','Gambar ArcGIS termuat sebagai raster tiles. Data belum terverifikasi mutakhir; bandingkan dengan radar resmi BMKG.');});
  }
  // Awal aplikasi: ?utc=YYYYMMDD-HHMM (opsional, dapat dibagikan).
  const params=new URLSearchParams(location.search),starting=params.get('utc');
@@ -367,10 +369,16 @@
    if(!isNaN(date.getTime()))wib.value=wibValueFromDate(date);
  }
  els('load').addEventListener('click',()=>{stop();loadFrame();});
+  els('refresh-arcgis').addEventListener('click',()=>{
+    if(!isLiveTiles()){showStatus('wait','Refresh paksa tersedia pada mode raster tiles ArcGIS.');return;}
+    forcedTileRefreshKey=Date.now();
+    els('last-refresh-arcgis').textContent='Permintaan ulang '+timeFmt(new Date(),'Asia/Jakarta')+' WIB. Ini waktu permintaan, bukan waktu observasi radar.';
+    stop();loadFrame();
+  });
  els('previous').addEventListener('click',()=>{stop();setDateAndLoad(new Date(currentUTC().getTime()-Number(stepEl.value)*60000));});
  els('next').addEventListener('click',()=>{stop();setDateAndLoad(new Date(currentUTC().getTime()+Number(stepEl.value)*60000));});
  wib.addEventListener('change',()=>{stop();loadFrame();});
- sourceEl.addEventListener('change',()=>{stop();els('quality-wrap').style.display=isLiveTiles()?'block':'none';els('quality-hint').style.display=isLiveTiles()?'block':'none';updateLiveControls();mapMoving=false;clearTimeout(viewReloadTimer);els('proxy-wrap').style.display=sourceEl.value==='proxy'?'block':'none';if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');loadFrame();});
+ sourceEl.addEventListener('change',()=>{stop();els('refresh-arcgis').style.display=isLiveTiles()?'block':'none';els('last-refresh-arcgis').style.display=isLiveTiles()?'block':'none';els('quality-wrap').style.display=isLiveTiles()?'block':'none';els('quality-hint').style.display=isLiveTiles()?'block':'none';updateLiveControls();mapMoving=false;clearTimeout(viewReloadTimer);els('proxy-wrap').style.display=sourceEl.value==='proxy'?'block':'none';if(map?.getLayer('footprint-line'))map.setLayoutProperty('footprint-line','visibility',els('footprint').checked&&sourceEl.value!=='arcgis'?'visible':'none');loadFrame();});
  els('proxy-input').addEventListener('change',()=>{if(sourceEl.value==='proxy'){stop();loadFrame();}});
  els('play').addEventListener('click',()=>{if(running)stop();else runSeries(false);});
  els('stop').addEventListener('click',stop);
@@ -474,7 +482,7 @@
    }
  });
  // Jika file terpilih lokal dan pengguna mengubah frame, aplikasi kembali memakai metode dropdown.
- els('quality-wrap').style.display=isLiveTiles()?'block':'none';els('quality-hint').style.display=isLiveTiles()?'block':'none';
+ els('refresh-arcgis').style.display=isLiveTiles()?'block':'none';els('last-refresh-arcgis').style.display=isLiveTiles()?'block':'none';els('quality-wrap').style.display=isLiveTiles()?'block':'none';els('quality-hint').style.display=isLiveTiles()?'block':'none';
  setupMap();updateLabels();updateLiveControls();loadFrame();
 })();
 </script>
