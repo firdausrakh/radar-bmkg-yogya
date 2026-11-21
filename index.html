@@ -76,7 +76,7 @@
     <button class="btn tiny" id="diagnose" style="width:100%;margin:8px 0">🔍 Diagnosa gambar pada browser</button>
     <div class="url-box" id="frame-url">Memuat...</div>
     <div style="margin-top:8px"><a id="open-url" href="https://stamet-yogya.bmkg.go.id/area-hujan/" target="_blank" rel="noopener noreferrer">Buka gambar asli di tab baru ↗</a></div>
-    <p class="note">ArcGIS BMKG mengekspor PNG berdasarkan viewport MapLibre dalam EPSG:3857; parameter waktu diuji sebagai menit Unix UTC. Peta digeser atau diperbesar akan memuat gambar baru. Jika sumber menolak akses, periksa F12 → Network.</p>
+    <p class="note">ArcGIS BMKG mengekspor PNG berdasarkan viewport MapLibre dalam EPSG:3857; parameter waktu menggunakan milidetik Unix UTC sesuai standar ArcGIS REST. Peta digeser atau diperbesar akan memuat gambar baru. Jika sumber menolak akses, periksa F12 → Network.</p>
    </div>
    <div class="section">
     <h2>03 / Tampilan & diagnostik</h2>
@@ -86,6 +86,22 @@
     <label class="checkline"><input id="footprint" type="checkbox"> Tampilkan garis batas citra</label>
     <div class="log" id="log" aria-label="Hasil pengujian per frame"></div>
     <p class="note"><b>CMAX adalah reflektivitas radar</b> (dBZ), bukan besaran hujan mm/jam secara langsung. Warna dan artefak nonhujan harus ditafsirkan sesuai keterangan BMKG.</p>
+   </div>
+   <div class="section">
+     <h2>04 / Bandingkan dua frame</h2>
+     <p class="note">Periksa apakah layer CMAX benar-benar memiliki data historis. Bbox dan ukuran sama; hanya parameter waktu yang diubah.</p>
+     <div class="two" style="margin-top:9px">
+       <label class="field"><span>Selisih waktu</span><select id="compare-offset"><option value="10">10 menit</option><option value="30" selected>30 menit</option><option value="60">60 menit</option><option value="120">120 menit</option></select></label>
+       <button class="btn" id="compare" style="align-self:center">Bandingkan</button>
+     </div>
+     <div id="comparison" style="display:none">
+       <div class="two">
+         <div><small id="compare-label-a"></small><a id="compare-link-a" target="_blank" rel="noopener noreferrer"><img id="compare-a" alt="Frame sebelumnya" style="width:100%;min-height:95px;border:1px solid #3a5067"></a></div>
+         <div><small id="compare-label-b"></small><a id="compare-link-b" target="_blank" rel="noopener noreferrer"><img id="compare-b" alt="Frame dipilih" style="width:100%;min-height:95px;border:1px solid #3a5067"></a></div>
+       </div>
+       <p class="note" id="compare-msg">Buka masing-masing gambar untuk melihat perbedaan.</p>
+     </div>
+     <p class="note"><a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer?f=pjson" target="_blank" rel="noopener noreferrer">Periksa timeInfo pada metadata ArcGIS</a></p>
    </div>
    <p class="foot">Data radar: <a href="https://gis.bmkg.go.id/arcgis/rest/services/radarcmax/MapServer" target="_blank" rel="noopener noreferrer">BMKG ArcGIS Radar CMAX</a>. Mode PNG YOG memakai georeferensi tampilan situs BMKG. Basemap © Esri dan kontributor.</p>
   </div>
@@ -122,7 +138,7 @@
     const se=map?map.unproject([width,height]):{lng:111.45,lat:-9.2};
     const a=mercatorPoint(nw.lng,nw.lat),b=mercatorPoint(se.lng,se.lat);
     const bbox=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])].join(',');
-    const params=new URLSearchParams({bbox,bboxSR:'3857',imageSR:'3857',size:iw+','+ih,format:'png32',transparent:'true',f:'image',time:String(Math.floor(d.getTime()/60000))});
+    const params=new URLSearchParams({bbox,bboxSR:'3857',imageSR:'3857',size:iw+','+ih,format:'png32',transparent:'true',f:'image',time:String(d.getTime())});
     return ARCGIS_EXPORT+'?'+params.toString();
   }
  const els=id=>document.getElementById(id);
@@ -325,6 +341,23 @@
    const r=await probe(lastObjectUrl);if(id!==requestSerial)return;
    if(r.ok){img.src=lastObjectUrl;lastLoadedUrl=lastObjectUrl;lastSuccessfulFrame=d;applyOverlay();showStatus('good','PNG lokal berhasil ditampilkan: '+file.name+' ('+r.width+' × '+r.height+'). Waktu label mengikuti input WIB, bukan metadata file.');pushLog(d,true,'lokal');}
    else showStatus('bad','PNG lokal gagal dibaca sebagai gambar.');
+ });
+ els('compare').addEventListener('click',()=>{
+   if(sourceEl.value!=='arcgis'){showStatus('bad','Pilih sumber ArcGIS BMKG untuk perbandingan.');return;}
+   if(!map){showStatus('bad','Peta belum tersedia.');return;}
+   let d;try{d=currentUTC();}catch(e){showStatus('bad',e.message);return;}
+   const before=new Date(d.getTime()-Number(els('compare-offset').value)*60000);
+   const u1=arcgisURL(before),u2=arcgisURL(d);
+   els('comparison').style.display='block';
+   els('compare-label-a').textContent=shortFmt(before,'Asia/Jakarta')+' WIB';
+   els('compare-label-b').textContent=shortFmt(d,'Asia/Jakarta')+' WIB';
+   els('compare-link-a').href=u1;els('compare-link-b').href=u2;
+   let completed=0,failed=0;
+   els('compare-msg').textContent='Memuat dua gambar...';
+   const complete=(ok)=>{completed++;if(!ok)failed++;if(completed===2)els('compare-msg').textContent=failed?'Setidaknya satu gambar gagal dimuat. Periksa F12 → Network.':'Kedua gambar termuat. Jika terlihat sama, server mungkin tidak menyediakan riwayat; periksa timeInfo MapServer.';};
+   for(const [id,u] of [['compare-a',u1],['compare-b',u2]]){
+      const e=els(id);e.onload=()=>complete(true);e.onerror=()=>complete(false);e.src=u;
+   }
  });
  // Jika file terpilih lokal dan pengguna mengubah frame, aplikasi kembali memakai metode dropdown.
  setupMap();updateLabels();loadFrame();
