@@ -274,6 +274,7 @@
      map.addSource('radar-site',{type:'geojson',data:{type:'Feature',geometry:{type:'Point',coordinates:[110.354311,-7.731645]},properties:{name:'Radar Sleman'}}});
      map.addLayer({id:'radar-site-circle',type:'circle',source:'radar-site',paint:{'circle-radius':5,'circle-color':'#7de3eb','circle-stroke-color':'#081928','circle-stroke-width':2}});
      applyOverlay();
+     if(sourceEl.value==='arcgis')loadFrame();
    });
    map.on('movestart',()=>{if(sourceEl.value==='arcgis'){mapMoving=true;applyOverlay();}});
     map.on('move',()=>{if(sourceEl.value!=='arcgis')applyOverlay();});
